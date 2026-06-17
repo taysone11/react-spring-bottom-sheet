@@ -5,7 +5,6 @@
 // It also ensures that when transitioning to open on mount the state is always clean, not affected by previous states that could
 // cause race conditions.
 
-import { useMachine } from '@xstate/react'
 import React, {
   useCallback,
   useEffect,
@@ -14,6 +13,7 @@ import React, {
 } from 'react'
 import { animated, config } from 'react-spring'
 import { rubberbandIfOutOfBounds, useDrag } from 'react-use-gesture'
+import { useOverlayMachine } from './hooks/useOverlayMachine'
 import {
   useAriaHider,
   useFocusTrap,
@@ -25,7 +25,6 @@ import {
   useSpring,
   useSpringInterpolations,
 } from './hooks'
-import { overlayMachine } from './machines/overlay'
 import type {
   defaultSnapProps,
   Props,
@@ -36,6 +35,14 @@ import type {
 import { debugging } from './utils'
 
 const { tension, friction } = config.default
+type AnimatedDivProps = React.PropsWithChildren<
+  Record<string, unknown> & {
+    className?: string
+    ref?: React.Ref<HTMLDivElement>
+    style?: React.CSSProperties & Record<string, unknown>
+  }
+>
+const AnimatedDiv = animated.div as React.ComponentType<AnimatedDivProps>
 
 // @TODO implement AbortController to deal with race conditions
 
@@ -102,7 +109,7 @@ export const BottomSheet = React.forwardRef<
 
   // Keeps track of the current height, or the height transitioning to
   const heightRef = useRef(0)
-  const resizeSourceRef = useRef<ResizeSource>()
+  const resizeSourceRef = useRef<ResizeSource>('window')
   const preventScrollingRef = useRef(false)
 
   const prefersReducedMotion = useReducedMotion()
@@ -182,7 +189,7 @@ export const BottomSheet = React.forwardRef<
       ),
     [set]
   )
-  const [current, send] = useMachine(overlayMachine, {
+  const [current, send] = useOverlayMachine({
     devTools: debugging,
     actions: {
       onOpenCancel: useCallback(
@@ -449,21 +456,24 @@ export const BottomSheet = React.forwardRef<
 
   useEffect(() => {
     const elem = scrollRef.current
+    if (!elem) {
+      return
+    }
 
-    const preventScrolling = e => {
+    const preventScrolling = (event: Event) => {
       if (preventScrollingRef.current) {
-        e.preventDefault()
+        event.preventDefault()
       }
     }
 
-    const preventSafariOverscroll = e => {
+    const preventSafariOverscroll = (event: Event) => {
       if (elem.scrollTop < 0) {
         requestAnimationFrame(() => {
           elem.style.overflow = 'hidden'
           elem.scrollTop = 0
           elem.style.removeProperty('overflow')
         })
-        e.preventDefault()
+        event.preventDefault()
       }
     }
 
@@ -563,7 +573,7 @@ export const BottomSheet = React.forwardRef<
         newY = maxSnapRef.current
       }
 
-      preventScrollingRef.current = newY < maxSnapRef.current;
+      preventScrollingRef.current = newY < maxSnapRef.current
     } else {
       preventScrollingRef.current = false
     }
@@ -615,7 +625,7 @@ export const BottomSheet = React.forwardRef<
   const interpolations = useSpringInterpolations({ spring })
 
   return (
-    <animated.div
+    <AnimatedDiv
       {...props}
       data-rsbs-root
       data-rsbs-state={publicStates.find(current.matches)}
@@ -677,7 +687,7 @@ export const BottomSheet = React.forwardRef<
           </div>
         )}
       </div>
-    </animated.div>
+    </AnimatedDiv>
   )
 })
 

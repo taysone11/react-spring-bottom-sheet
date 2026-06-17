@@ -4,7 +4,7 @@ import styles from './ScrollUp.module.css'
 
 const ScrollUp = forwardRef<
   HTMLButtonElement,
-  Omit<React.PropsWithoutRef<JSX.IntrinsicElements['button']>, 'children'>
+  Omit<React.ComponentPropsWithoutRef<'button'>, 'children'>
 >(({ className, ...props }, ref) => (
   <button
     className={cx(

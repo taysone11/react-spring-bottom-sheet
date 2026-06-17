@@ -417,7 +417,7 @@ function Ten() {
 function Eleven() {
   const [open, setOpen] = useState(false)
   const [height, setHeight] = useState(undefined)
-  const sheetRef = useRef<BottomSheetRef>()
+  const sheetRef = useRef<BottomSheetRef | null>(null)
 
   return (
     <>
@@ -443,7 +443,7 @@ function Eleven() {
         footer={
           <Button
             onClick={() =>
-              sheetRef.current.snapTo(
+              sheetRef.current?.snapTo(
                 ({ height, snapPoints }) => {
                   const minSnap = Math.min(...snapPoints)
                   return height > minSnap ? minSnap : Math.max(...snapPoints)
@@ -459,7 +459,7 @@ function Eleven() {
         <SheetContent style={{ height }}>
           <Button
             onClick={() =>
-              sheetRef.current.snapTo(({ height, snapPoints }) => {
+              sheetRef.current?.snapTo(({ height, snapPoints }) => {
                 const minSnap = Math.min(...snapPoints)
                 return height > minSnap ? minSnap : Math.max(...snapPoints)
               })
@@ -476,7 +476,7 @@ function Eleven() {
 
 function Twelve() {
   const [open, setOpen] = useState(false)
-  const sheetRef = useRef<BottomSheetRef>()
+  const sheetRef = useRef<BottomSheetRef | null>(null)
   const [height, setHeight] = useState(0)
 
   return (

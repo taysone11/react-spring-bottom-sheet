@@ -1,6 +1,6 @@
 /* eslint-disable react/jsx-pascal-case */
-import Portal from '@reach/portal'
 import React, { forwardRef, useRef, useState, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { BottomSheet as _BottomSheet } from './BottomSheet'
 import type { Props, RefHandles, SpringEvent } from './types'
 import { useLayoutEffect } from './hooks'
@@ -10,6 +10,23 @@ export type {
   Props as BottomSheetProps,
 } from './types'
 
+function Portal({ children }: { children: React.ReactNode }) {
+  const [portalNode, setPortalNode] = useState<HTMLDivElement | null>(null)
+
+  useLayoutEffect(() => {
+    const element = document.createElement('div')
+    element.setAttribute('data-rsbs-portal', '')
+    document.body.appendChild(element)
+    setPortalNode(element)
+
+    return () => {
+      document.body.removeChild(element)
+    }
+  }, [])
+
+  return portalNode ? createPortal(children, portalNode) : null
+}
+
 // Because SSR is annoying to deal with, and all the million complaints about window, navigator and dom elenents!
 export const BottomSheet = forwardRef<RefHandles, Props>(function BottomSheet(
   { onSpringStart, onSpringEnd, skipInitialTransition, ...props },
@@ -17,9 +34,9 @@ export const BottomSheet = forwardRef<RefHandles, Props>(function BottomSheet(
 ) {
   // Mounted state, helps SSR but also ensures you can't tab into the sheet while it's closed, or nav there in a screen reader
   const [mounted, setMounted] = useState(false)
-  const timerRef = useRef<ReturnType<typeof requestAnimationFrame>>()
+  const timerRef = useRef<ReturnType<typeof requestAnimationFrame> | null>(null)
   // The last point that the user snapped to, useful for open/closed toggling and the user defined height is remembered
-  const lastSnapRef = useRef(null)
+  const lastSnapRef = useRef<number | null>(null)
   // @TODO refactor to an initialState: OPEN | CLOSED property as it's much easier to understand
   // And informs what we should animate from. If the sheet is mounted with open = true, then initialState = OPEN.
   // When initialState = CLOSED, then internal sheet must first render with open={false} before setting open={props.open}
@@ -32,7 +49,9 @@ export const BottomSheet = forwardRef<RefHandles, Props>(function BottomSheet(
   // Using layout effect to support cases where the bottom sheet have to appear already open, no transition
   useLayoutEffect(() => {
     if (props.open) {
-      cancelAnimationFrame(timerRef.current)
+      if (timerRef.current !== null) {
+        cancelAnimationFrame(timerRef.current)
+      }
       setMounted(true)
 
       // Cleanup defaultOpen state on close
@@ -49,7 +68,9 @@ export const BottomSheet = forwardRef<RefHandles, Props>(function BottomSheet(
 
       if (event.type === 'OPEN') {
         // Ensures that when it's opening we abort any pending unmount action
-        cancelAnimationFrame(timerRef.current)
+        if (timerRef.current !== null) {
+          cancelAnimationFrame(timerRef.current)
+        }
       }
     },
     [onSpringStart]
@@ -74,7 +95,7 @@ export const BottomSheet = forwardRef<RefHandles, Props>(function BottomSheet(
   }
 
   return (
-    <Portal data-rsbs-portal>
+    <Portal>
       <_BottomSheet
         {...props}
         lastSnapRef={lastSnapRef}

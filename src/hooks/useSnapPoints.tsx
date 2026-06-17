@@ -27,15 +27,15 @@ export function useSnapPoints({
   registerReady,
   resizeSourceRef,
 }: {
-  contentRef: React.RefObject<Element>
+  contentRef: React.RefObject<Element | null>
   controlledMaxHeight?: number
   footerEnabled: boolean
-  footerRef: React.RefObject<Element>
+  footerRef: React.RefObject<Element | null>
   getSnapPoints: snapPoints
   headerEnabled: boolean
-  headerRef: React.RefObject<Element>
+  headerRef: React.RefObject<Element | null>
   heightRef: React.RefObject<number>
-  lastSnapRef: React.RefObject<number>
+  lastSnapRef: React.RefObject<number | null>
   ready: boolean
   registerReady: ReturnType<typeof useReady>['registerReady']
   resizeSourceRef: React.MutableRefObject<ResizeSource>
@@ -106,12 +106,12 @@ function useDimensions({
   registerReady,
   resizeSourceRef,
 }: {
-  contentRef: React.RefObject<Element>
+  contentRef: React.RefObject<Element | null>
   controlledMaxHeight?: number
   footerEnabled: boolean
-  footerRef: React.RefObject<Element>
+  footerRef: React.RefObject<Element | null>
   headerEnabled: boolean
-  headerRef: React.RefObject<Element>
+  headerRef: React.RefObject<Element | null>
   registerReady: ReturnType<typeof useReady>['registerReady']
   resizeSourceRef: React.MutableRefObject<ResizeSource>
 }) {
@@ -173,7 +173,7 @@ const observerOptions: ResizeObserverOptions = {
  * @param ref - A React ref to an element
  */
 function useElementSizeObserver(
-  ref: React.RefObject<Element>,
+  ref: React.RefObject<Element | null>,
   {
     label,
     enabled,
@@ -215,16 +215,18 @@ function useElementSizeObserver(
 
 // Blazingly keep track of the current viewport height without blocking the thread, keeping that sweet 60fps on smartphones
 function useMaxHeight(
-  controlledMaxHeight,
+  controlledMaxHeight: number | undefined,
   registerReady: ReturnType<typeof useReady>['registerReady'],
   resizeSourceRef: React.MutableRefObject<ResizeSource>
 ) {
   const setReady = useMemo(() => registerReady('maxHeight'), [registerReady])
-  const [maxHeight, setMaxHeight] = useState(() =>
-    roundAndCheckForNaN(controlledMaxHeight) || typeof window !== 'undefined'
-      ? window.innerHeight
-      : 0
-  )
+  const [maxHeight, setMaxHeight] = useState(() => {
+    const maxHeightProp = roundAndCheckForNaN(controlledMaxHeight)
+    if (maxHeightProp) {
+      return maxHeightProp
+    }
+    return typeof window !== 'undefined' ? window.innerHeight : 0
+  })
   const ready = maxHeight > 0
   const raf = useRef(0)
 

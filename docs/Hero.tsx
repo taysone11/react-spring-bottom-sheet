@@ -4,12 +4,25 @@ import { animated, config, useSpring } from 'react-spring'
 import styles from './Hero.module.css'
 
 const subtitle = 'Accessible, Delightful, and Performant'
+type AnimatedSvgProps<TElement extends Element> = React.PropsWithChildren<
+  Record<string, unknown> & {
+    className?: string
+    ref?: React.Ref<TElement>
+    style?: React.CSSProperties & Record<string, unknown>
+  }
+>
+const AnimatedPath =
+  animated.path as React.ComponentType<AnimatedSvgProps<SVGPathElement>>
+const AnimatedGroup =
+  animated.g as React.ComponentType<AnimatedSvgProps<SVGGElement>>
 
-const Link: React.FC<{
+type LinkProps = {
+  children: React.ReactNode
   href?: string
   target?: string
   className?: string
-}> = forwardRef(
+}
+const Link = forwardRef<HTMLAnchorElement, LinkProps>(
   ({ children, className, ...props }, ref: React.Ref<HTMLAnchorElement>) => (
     <a
       {...props}
@@ -41,13 +54,19 @@ const Links = ({ className }: { className?: string }) => (
   </>
 )
 // The wrapping in <g> is because of Safari 🙄 https://bug-149617-attachments.webkit.org/attachment.cgi?id=262048
-const SvgText: React.FC<{ x?: string; y?: string; className?: string }> = ({
+function SvgText({
   children,
   className,
   x = '23',
   y,
   ...props
-}) => (
+}: {
+  children: React.ReactNode
+  x?: string
+  y?: string
+  className?: string
+}) {
+  return (
   <g
     {...props}
     className={cx(className, styles.text, 'transform-gpu duration-0 opacity-0')}
@@ -60,7 +79,8 @@ const SvgText: React.FC<{ x?: string; y?: string; className?: string }> = ({
       {children}
     </text>
   </g>
-)
+  )
+}
 
 let immediate = false
 export default function Hero({ className }: { className?: string }) {
@@ -69,7 +89,7 @@ export default function Hero({ className }: { className?: string }) {
   const skip = !mounted && immediate ? true : false
   const [open, setOpen] = useState(true)
   const openClassRef = useRef(false)
-  const classNameRef = useRef(null)
+  const classNameRef = useRef<SVGGElement | null>(null)
   const { y, state } = useSpring<any>({
     config: config.stiff,
     immediate: skip,
@@ -125,7 +145,7 @@ export default function Hero({ className }: { className?: string }) {
               d="M33.1779 0C10.0158 0 3.8147e-05 10.4712 3.8147e-05 33.4574V377.457C3.8147e-05 400.443 10.0158 410.496 33.1779 410.496H166.41C188.769 410.496 200 399.634 200 377.457C200 377.457 200 56.4435 200 33.4574C200 10.4712 189.34 0 166.178 0H33.1779Z"
               fill="#592340"
             />
-            <animated.path
+            <AnimatedPath
               style={{
                 fill: state.interpolate({ output: ['#fed7e6', '#FC9EC2'] }),
               }}
@@ -134,11 +154,11 @@ export default function Hero({ className }: { className?: string }) {
               d="M49 13.5C49.5 18 52.6325 23 60.5 23H139C146.868 23 149.5 18 150 13.5C150.282 10.9661 151.291 9 155 9L169.527 9.08597C182.598 9.08597 191 16.9649 191 30V379.5C191 392.535 182.598 400.468 169.527 400.468H30.0545C16.9836 400.468 9 392.585 9 379.55V30C9 16.9649 16.929 9 30 9H45C48.7085 9 48.7791 11.5122 49 13.5Z"
               fill="#fed7e6"
             />
-            <animated.g
+            <AnimatedGroup
               ref={classNameRef}
               className="transform-gpu origin-center"
               style={{
-                ['--tw-translate-y' as any]: y,
+                '--tw-translate-y': y as unknown,
                 /*
                 ['--tw-scale-x' as any]: state.interpolate({
                   output: [0.9, 1],
@@ -165,7 +185,7 @@ export default function Hero({ className }: { className?: string }) {
               <SvgText y="174">Spring</SvgText>
               <SvgText y="220">Bottom</SvgText>
               <SvgText y="266">Sheet</SvgText>
-            </animated.g>
+            </AnimatedGroup>
           </svg>
           <div className="font-display ml-10 mb-10 text-hero hidden md:block">
             <h1 className={cx(styles.subtitle, 'pb-4 max-w-sm')}>{subtitle}</h1>
