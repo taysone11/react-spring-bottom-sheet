@@ -5,15 +5,17 @@
 // It also ensures that when transitioning to open on mount the state is always clean, not affected by previous states that could
 // cause race conditions.
 
+import { useMachine } from '@xstate/react'
 import React, {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useMemo,
   useRef,
 } from 'react'
 import { animated, config } from 'react-spring'
 import { rubberbandIfOutOfBounds, useDrag } from 'react-use-gesture'
-import { useOverlayMachine } from './hooks/useOverlayMachine'
+import { fromPromise } from 'xstate'
 import {
   useAriaHider,
   useFocusTrap,
@@ -25,6 +27,7 @@ import {
   useSpring,
   useSpringInterpolations,
 } from './hooks'
+import { overlayMachine, OverlayActorInput } from './machines/overlay'
 import type {
   defaultSnapProps,
   Props,
@@ -32,7 +35,6 @@ import type {
   ResizeSource,
   SnapPointProps,
 } from './types'
-import { debugging } from './utils'
 
 const { tension, friction } = config.default
 type AnimatedDivProps = React.PropsWithChildren<
@@ -189,240 +191,212 @@ export const BottomSheet = React.forwardRef<
       ),
     [set]
   )
-  const [current, send] = useOverlayMachine({
-    devTools: debugging,
-    actions: {
-      onOpenCancel: useCallback(
-        () => onSpringCancelRef.current?.({ type: 'OPEN' }),
-        []
-      ),
-      onSnapCancel: useCallback(
-        (context) =>
-          onSpringCancelRef.current?.({
-            type: 'SNAP',
-            source: context.snapSource,
-          }),
-        []
-      ),
-      onCloseCancel: useCallback(
-        () => onSpringCancelRef.current?.({ type: 'CLOSE' }),
-        []
-      ),
-      onResizeCancel: useCallback(
-        () =>
-          onSpringCancelRef.current?.({
-            type: 'RESIZE',
-            source: resizeSourceRef.current,
-          }),
-        []
-      ),
-      onOpenEnd: useCallback(
-        () => onSpringEndRef.current?.({ type: 'OPEN' }),
-        []
-      ),
-      onSnapEnd: useCallback(
-        (context, event) =>
-          onSpringEndRef.current?.({
-            type: 'SNAP',
-            source: context.snapSource,
-          }),
-        []
-      ),
-      onResizeEnd: useCallback(
-        () =>
-          onSpringEndRef.current?.({
-            type: 'RESIZE',
-            source: resizeSourceRef.current,
-          }),
-        []
-      ),
-    },
-    context: { initialState },
-    services: {
-      onSnapStart: useCallback(
-        async (context, event) =>
-          onSpringStartRef.current?.({
-            type: 'SNAP',
-            source: event.payload.source || 'custom',
-          }),
-        []
-      ),
-      onOpenStart: useCallback(
-        async () => onSpringStartRef.current?.({ type: 'OPEN' }),
-        []
-      ),
-      onCloseStart: useCallback(
-        async () => onSpringStartRef.current?.({ type: 'CLOSE' }),
-        []
-      ),
-      onResizeStart: useCallback(
-        async () =>
-          onSpringStartRef.current?.({
-            type: 'RESIZE',
-            source: resizeSourceRef.current,
-          }),
-        []
-      ),
-      onSnapEnd: useCallback(
-        async (context, event) =>
-          onSpringEndRef.current?.({
-            type: 'SNAP',
-            source: context.snapSource,
-          }),
-        []
-      ),
-      onOpenEnd: useCallback(
-        async () => onSpringEndRef.current?.({ type: 'OPEN' }),
-        []
-      ),
-      onCloseEnd: useCallback(
-        async () => onSpringEndRef.current?.({ type: 'CLOSE' }),
-        []
-      ),
-      onResizeEnd: useCallback(
-        async () =>
-          onSpringEndRef.current?.({
-            type: 'RESIZE',
-            source: resizeSourceRef.current,
-          }),
-        []
-      ),
-      renderVisuallyHidden: useCallback(
-        async (context, event) => {
-          await asyncSet({
-            y: defaultSnapRef.current,
-            ready: 0,
-            maxHeight: maxHeightRef.current,
-            maxSnap: maxSnapRef.current,
-            // Using defaultSnapRef instead of minSnapRef to avoid animating `height` on open
-            minSnap: defaultSnapRef.current,
-            immediate: true,
-          })
+  const machine = useMemo(
+    () =>
+      overlayMachine.provide({
+        actions: {
+          onOpenCancel: () => onSpringCancelRef.current?.({ type: 'OPEN' }),
+          onSnapCancel: ({ context }) =>
+            onSpringCancelRef.current?.({
+              type: 'SNAP',
+              source: context.snapSource,
+            }),
+          onCloseCancel: () => onSpringCancelRef.current?.({ type: 'CLOSE' }),
+          onResizeCancel: () =>
+            onSpringCancelRef.current?.({
+              type: 'RESIZE',
+              source: resizeSourceRef.current,
+            }),
+          onOpenEnd: () => onSpringEndRef.current?.({ type: 'OPEN' }),
+          onSnapEnd: ({ context }) =>
+            onSpringEndRef.current?.({
+              type: 'SNAP',
+              source: context.snapSource,
+            }),
+          onResizeEnd: () =>
+            onSpringEndRef.current?.({
+              type: 'RESIZE',
+              source: resizeSourceRef.current,
+            }),
         },
-        [asyncSet]
-      ),
-      activate: useCallback(
-        async (context, event) => {
-          canDragRef.current = true
-          await Promise.all([
-            scrollLockRef.current.activate(),
-            focusTrapRef.current.activate(),
-            ariaHiderRef.current.activate(),
-          ])
+        actors: {
+          onSnapStart: fromPromise(
+            async ({ input }: { input: OverlayActorInput }) => {
+              if (input.event.type === 'SNAP') {
+                await onSpringStartRef.current?.({
+                  type: 'SNAP',
+                  source: input.event.payload.source || 'custom',
+                })
+              }
+            }
+          ),
+          onOpenStart: fromPromise(async () =>
+            onSpringStartRef.current?.({ type: 'OPEN' })
+          ),
+          onCloseStart: fromPromise(async () =>
+            onSpringStartRef.current?.({ type: 'CLOSE' })
+          ),
+          onResizeStart: fromPromise(async () =>
+            onSpringStartRef.current?.({
+              type: 'RESIZE',
+              source: resizeSourceRef.current,
+            })
+          ),
+          onSnapEnd: fromPromise(
+            async ({ input }: { input: OverlayActorInput }) =>
+              onSpringEndRef.current?.({
+                type: 'SNAP',
+                source: input.context.snapSource,
+              })
+          ),
+          onOpenEnd: fromPromise(async () =>
+            onSpringEndRef.current?.({ type: 'OPEN' })
+          ),
+          onCloseEnd: fromPromise(async () =>
+            onSpringEndRef.current?.({ type: 'CLOSE' })
+          ),
+          onResizeEnd: fromPromise(async () =>
+            onSpringEndRef.current?.({
+              type: 'RESIZE',
+              source: resizeSourceRef.current,
+            })
+          ),
+          renderVisuallyHidden: fromPromise(async () => {
+            await asyncSet({
+              y: defaultSnapRef.current,
+              ready: 0,
+              maxHeight: maxHeightRef.current,
+              maxSnap: maxSnapRef.current,
+              // Using defaultSnapRef instead of minSnapRef to avoid animating `height` on open
+              minSnap: defaultSnapRef.current,
+              immediate: true,
+            })
+          }),
+          activate: fromPromise(async () => {
+            canDragRef.current = true
+            await Promise.all([
+              scrollLockRef.current.activate(),
+              focusTrapRef.current.activate(),
+              ariaHiderRef.current.activate(),
+            ])
+          }),
+          deactivate: fromPromise(async () => {
+            scrollLockRef.current.deactivate()
+            focusTrapRef.current.deactivate()
+            ariaHiderRef.current.deactivate()
+            canDragRef.current = false
+          }),
+          openImmediately: fromPromise(async () => {
+            heightRef.current = defaultSnapRef.current
+            await asyncSet({
+              y: defaultSnapRef.current,
+              ready: 1,
+              maxHeight: maxHeightRef.current,
+              maxSnap: maxSnapRef.current,
+              // Using defaultSnapRef instead of minSnapRef to avoid animating `height` on open
+              minSnap: defaultSnapRef.current,
+              immediate: true,
+            })
+          }),
+          openSmoothly: fromPromise(async () => {
+            await asyncSet({
+              y: 0,
+              ready: 1,
+              maxHeight: maxHeightRef.current,
+              maxSnap: maxSnapRef.current,
+              // Using defaultSnapRef instead of minSnapRef to avoid animating `height` on open
+              minSnap: defaultSnapRef.current,
+              immediate: true,
+            })
+
+            heightRef.current = defaultSnapRef.current
+
+            await asyncSet({
+              y: defaultSnapRef.current,
+              ready: 1,
+              maxHeight: maxHeightRef.current,
+              maxSnap: maxSnapRef.current,
+              // Using defaultSnapRef instead of minSnapRef to avoid animating `height` on open
+              minSnap: defaultSnapRef.current,
+              immediate: prefersReducedMotion.current,
+            })
+          }),
+          snapSmoothly: fromPromise(
+            async ({ input }: { input: OverlayActorInput }) => {
+              const snap = findSnapRef.current(input.context.y)
+              heightRef.current = snap
+              lastSnapRef.current = snap
+              await asyncSet({
+                y: snap,
+                ready: 1,
+                maxHeight: maxHeightRef.current,
+                maxSnap: maxSnapRef.current,
+                minSnap: minSnapRef.current,
+                immediate: prefersReducedMotion.current,
+                config: { velocity: input.context.velocity },
+              })
+            }
+          ),
+          resizeSmoothly: fromPromise(async () => {
+            const snap = findSnapRef.current(heightRef.current)
+            heightRef.current = snap
+            lastSnapRef.current = snap
+            await asyncSet({
+              y: snap,
+              ready: 1,
+              maxHeight: maxHeightRef.current,
+              maxSnap: maxSnapRef.current,
+              minSnap: minSnapRef.current,
+              immediate:
+                resizeSourceRef.current === 'element'
+                  ? prefersReducedMotion.current
+                  : true,
+            })
+          }),
+          closeSmoothly: fromPromise(async () => {
+            // Avoid animating the height property on close and stay within FLIP bounds by upping the minSnap
+            asyncSet({
+              minSnap: heightRef.current,
+              immediate: true,
+            })
+
+            heightRef.current = 0
+
+            await asyncSet({
+              y: 0,
+              maxHeight: maxHeightRef.current,
+              maxSnap: maxSnapRef.current,
+              immediate: prefersReducedMotion.current,
+            })
+
+            await asyncSet({ ready: 0, immediate: true })
+          }),
         },
-        [ariaHiderRef, focusTrapRef, scrollLockRef]
-      ),
-      deactivate: useCallback(async () => {
-        scrollLockRef.current.deactivate()
-        focusTrapRef.current.deactivate()
-        ariaHiderRef.current.deactivate()
-        canDragRef.current = false
-      }, [ariaHiderRef, focusTrapRef, scrollLockRef]),
-      openImmediately: useCallback(async () => {
-        heightRef.current = defaultSnapRef.current
-        await asyncSet({
-          y: defaultSnapRef.current,
-          ready: 1,
-          maxHeight: maxHeightRef.current,
-          maxSnap: maxSnapRef.current,
-          // Using defaultSnapRef instead of minSnapRef to avoid animating `height` on open
-          minSnap: defaultSnapRef.current,
-          immediate: true,
-        })
-      }, [asyncSet]),
-      openSmoothly: useCallback(async () => {
-        await asyncSet({
-          y: 0,
-          ready: 1,
-          maxHeight: maxHeightRef.current,
-          maxSnap: maxSnapRef.current,
-          // Using defaultSnapRef instead of minSnapRef to avoid animating `height` on open
-          minSnap: defaultSnapRef.current,
-          immediate: true,
-        })
-
-        heightRef.current = defaultSnapRef.current
-
-        await asyncSet({
-          y: defaultSnapRef.current,
-          ready: 1,
-          maxHeight: maxHeightRef.current,
-          maxSnap: maxSnapRef.current,
-          // Using defaultSnapRef instead of minSnapRef to avoid animating `height` on open
-          minSnap: defaultSnapRef.current,
-          immediate: prefersReducedMotion.current,
-        })
-      }, [asyncSet, prefersReducedMotion]),
-      snapSmoothly: useCallback(
-        async (context, event) => {
-          const snap = findSnapRef.current(context.y)
-          heightRef.current = snap
-          lastSnapRef.current = snap
-          await asyncSet({
-            y: snap,
-            ready: 1,
-            maxHeight: maxHeightRef.current,
-            maxSnap: maxSnapRef.current,
-            minSnap: minSnapRef.current,
-            immediate: prefersReducedMotion.current,
-            config: { velocity: context.velocity },
-          })
-        },
-        [asyncSet, lastSnapRef, prefersReducedMotion]
-      ),
-      resizeSmoothly: useCallback(async () => {
-        const snap = findSnapRef.current(heightRef.current)
-        heightRef.current = snap
-        lastSnapRef.current = snap
-        await asyncSet({
-          y: snap,
-          ready: 1,
-          maxHeight: maxHeightRef.current,
-          maxSnap: maxSnapRef.current,
-          minSnap: minSnapRef.current,
-          immediate:
-            resizeSourceRef.current === 'element'
-              ? prefersReducedMotion.current
-              : true,
-        })
-      }, [asyncSet, lastSnapRef, prefersReducedMotion]),
-      closeSmoothly: useCallback(
-        async (context, event) => {
-          // Avoid animating the height property on close and stay within FLIP bounds by upping the minSnap
-          asyncSet({
-            minSnap: heightRef.current,
-            immediate: true,
-          })
-
-          heightRef.current = 0
-
-          await asyncSet({
-            y: 0,
-            maxHeight: maxHeightRef.current,
-            maxSnap: maxSnapRef.current,
-            immediate: prefersReducedMotion.current,
-          })
-
-          await asyncSet({ ready: 0, immediate: true })
-        },
-        [asyncSet, prefersReducedMotion]
-      ),
-    },
-  })
+      }),
+    [
+      ariaHiderRef,
+      asyncSet,
+      focusTrapRef,
+      lastSnapRef,
+      prefersReducedMotion,
+      scrollLockRef,
+    ]
+  )
+  const [current, send] = useMachine(machine, { input: { initialState } })
 
   useEffect(() => {
     if (!ready) return
 
     if (_open) {
-      send('OPEN')
+      send({ type: 'OPEN' })
     } else {
-      send('CLOSE')
+      send({ type: 'CLOSE' })
     }
   }, [_open, send, ready])
   useLayoutEffect(() => {
     // Adjust the height whenever the snap points are changed due to resize events
     if (maxHeight || maxSnap || minSnap) {
-      send('RESIZE')
+      send({ type: 'RESIZE' })
     }
   }, [maxHeight, maxSnap, minSnap, send])
   useEffect(
@@ -439,7 +413,8 @@ export const BottomSheet = React.forwardRef<
     forwardRef,
     () => ({
       snapTo: (numberOrCallback, { velocity = 1, source = 'custom' } = {}) => {
-        send('SNAP', {
+        send({
+          type: 'SNAP',
           payload: {
             y: findSnapRef.current(numberOrCallback),
             velocity,
@@ -579,11 +554,12 @@ export const BottomSheet = React.forwardRef<
     }
 
     if (first) {
-      send('DRAG')
+      send({ type: 'DRAG' })
     }
 
     if (last) {
-      send('SNAP', {
+      send({
+        type: 'SNAP',
         payload: {
           y: newY,
           velocity: velocity > 0.05 ? velocity : 1,
@@ -628,7 +604,7 @@ export const BottomSheet = React.forwardRef<
     <AnimatedDiv
       {...props}
       data-rsbs-root
-      data-rsbs-state={publicStates.find(current.matches)}
+      data-rsbs-state={publicStates.find((state) => current.matches(state))}
       data-rsbs-is-blocking={blocking}
       data-rsbs-is-dismissable={!!onDismiss}
       data-rsbs-has-header={!!header}
