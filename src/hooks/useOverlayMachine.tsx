@@ -10,7 +10,6 @@ type OverlayOptions = Parameters<OverlayMachine['withConfig']>[0] & {
   devTools?: boolean
   context: OverlayState['context']
 }
-type OverlayEvent = Parameters<OverlayService['send']>[0]
 
 export function useOverlayMachine({
   context,
@@ -19,10 +18,11 @@ export function useOverlayMachine({
 }: OverlayOptions): [OverlayState, OverlayService['send']] {
   const configRef = useRef(config)
   configRef.current = config
+  const { initialState } = context
 
   const machine = useMemo(
-    () => overlayMachine.withConfig(configRef.current, context),
-    [context]
+    () => overlayMachine.withConfig(configRef.current, { initialState }),
+    [initialState]
   )
   const serviceRef = useRef<OverlayService | null>(null)
   const [state, setState] = useState<OverlayState>(() => machine.initialState)
@@ -45,10 +45,11 @@ export function useOverlayMachine({
     }
   }, [devTools, machine])
 
-  const send = useCallback<OverlayService['send']>(
-    (event: OverlayEvent) => serviceRef.current?.send(event),
+  const send = useCallback(
+    (...args: Parameters<OverlayService['send']>) =>
+      serviceRef.current?.send(...args),
     []
-  )
+  ) as OverlayService['send']
 
   return [state, send]
 }
